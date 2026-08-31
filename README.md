@@ -1,5 +1,7 @@
 # Bumplog
 
+**https://bumplog.sehahub.info**
+
 Paste a `package.json`, get every dependency's real release notes and breaking
 changes between the version you declare and the latest published.
 

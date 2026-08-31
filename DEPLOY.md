@@ -72,15 +72,22 @@ npx wrangler secret put GITHUB_TOKEN
 That needs Cloudflare credentials locally. Alternatively set it in the
 dashboard: **Workers & Pages → bumplog → Settings → Variables and Secrets**.
 
-## 6. Custom domain (optional)
+## 6. Custom domain
 
-`workers.dev` works, but Cloudflare recommends against it for production and a
-real domain is worth considerably more for search. Add the domain in the
-Cloudflare dashboard, then add a route to `wrangler.jsonc`:
+Live at **https://bumplog.sehahub.info**, attached through the Cloudflare
+dashboard (**Workers & Pages → bumplog → Settings → Domains & Routes**).
 
-```jsonc
-"routes": [{ "pattern": "bumplog.example.com", "custom_domain": true }]
-```
+`wrangler.jsonc` sets `"workers_dev": false`. Without it, every deploy
+re-enables the `workers.dev` hostname and the same pages become reachable at two
+addresses, each canonicalising to itself — which splits the search signal this
+project depends on.
+
+The domain is deliberately **not** declared in `wrangler.jsonc`. A
+`custom_domain` route makes Wrangler manage the zone's DNS record, which needs a
+zone-scoped token; with the account-scoped token above the deploy fails at the
+`wrangler deploy` step (verified — the failure was reproduced and then bisected
+away). Adding zone-level `Workers Routes: Edit` to the token would make the
+route declarable, at the cost of a broader token.
 
 ## Deploying from a machine instead
 
