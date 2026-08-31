@@ -213,7 +213,9 @@ app.get("/robots.txt", (c) =>
   ),
 );
 
-app.get("/healthz", (c) => c.json({ ok: true }));
+// Whether the token is wired up, never the token. Without it changelog
+// coverage silently degrades, so it is worth being able to check from outside.
+app.get("/healthz", (c) => c.json({ ok: true, githubToken: Boolean(c.env.GITHUB_TOKEN) }));
 
 app.notFound((c) =>
   page(
