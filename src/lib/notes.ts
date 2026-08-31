@@ -1,6 +1,6 @@
 import type { Cache } from "./cache";
 import { breakingChanges, sectionFor, splitChangelog } from "./changelog";
-import { USER_AGENT } from "./npm";
+import { USER_AGENT, pooled } from "./npm";
 import { type Repo, repoUrl } from "./repo";
 import { versionFromTag } from "./tags";
 
@@ -130,9 +130,24 @@ async function loadFromSource(
   if (afterList.length === 0) return found;
 
   const shapes = tagShapes(pkg, [...releases.values()]);
-  for (const version of afterList) {
-    const release = await fetchReleaseByTag(pkg, repo, version, shapes, deps);
-    if (release) found.set(version, noteFrom(version, release));
+
+  // One lookup has to go first to learn which tag shape this repo uses, and
+  // the newest version is the likeliest to actually have a release to learn
+  // from. Once the shape is cached the rest cost one request each and can run
+  // together, which is the difference between six seconds and two.
+  const probe = afterList[afterList.length - 1];
+  const probed = await fetchReleaseByTag(pkg, repo, probe, shapes, deps);
+  if (probed) found.set(probe, noteFrom(probe, probed));
+
+  const rest = afterList.slice(0, -1);
+  if (rest.length > 0) {
+    const results = await pooled(rest, TAG_CONCURRENCY, (version) =>
+      fetchReleaseByTag(pkg, repo, version, shapes, deps),
+    );
+    rest.forEach((version, index) => {
+      const release = results[index];
+      if (release) found.set(version, noteFrom(version, release));
+    });
   }
 
   return found;
@@ -291,6 +306,8 @@ async function loadReleases(
 }
 
 const MAX_TAG_LOOKUPS = 6;
+/** Workers allow six connections waiting on response headers at a time. */
+const TAG_CONCURRENCY = 4;
 
 /**
  * Templates to try when asking for one specific release, `{v}` standing in for

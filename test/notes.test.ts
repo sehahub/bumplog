@@ -214,6 +214,40 @@ describe("fetchNotes", () => {
     expect(cache.ttlOf("note:v1:widget:2.0.0")).toBeLessThanOrEqual(15 * 60);
   });
 
+  it("learns the tag shape once, then costs one request per version", async () => {
+    const routes: Record<string, string> = {
+      "https://api.github.com/repos/acme/widget/releases?per_page=100": "[]",
+    };
+    for (const v of ["3.0.0", "4.0.0", "5.0.0"]) {
+      routes[`https://api.github.com/repos/acme/widget/releases/tags/widget%40${v}`] =
+        JSON.stringify({ tag_name: `widget@${v}`, body: `notes ${v}`, html_url: `https://x/${v}` });
+    }
+    const { fetcher, calls } = stubFetch(routes);
+
+    const result = await fetchNotes("widget", repo, ["3.0.0", "4.0.0", "5.0.0"], {
+      cache,
+      fetcher,
+    });
+
+    expect(result.notes.map((n) => n.version)).toEqual(["3.0.0", "4.0.0", "5.0.0"]);
+
+    const tagCalls = calls.filter((c) => c.includes("/releases/tags/"));
+
+    // The newest version is probed first: it is the likeliest to have a
+    // release to learn the tag shape from.
+    expect(tagCalls[0]).toContain("5.0.0");
+
+    // The probe pays for guessing — three candidate shapes before `widget@`
+    // works. The other two versions then cost exactly one request each.
+    expect(tagCalls.filter((c) => c.includes("5.0.0"))).toHaveLength(3);
+    expect(tagCalls.filter((c) => c.includes("4.0.0"))).toEqual([
+      "https://api.github.com/repos/acme/widget/releases/tags/widget%404.0.0",
+    ]);
+    expect(tagCalls.filter((c) => c.includes("3.0.0"))).toEqual([
+      "https://api.github.com/repos/acme/widget/releases/tags/widget%403.0.0",
+    ]);
+  });
+
   it("stops calling the api once github reports a rate limit", async () => {
     const calls: string[] = [];
     const fetcher = (async (input: RequestInfo | URL) => {
