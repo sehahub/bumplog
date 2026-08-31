@@ -19,7 +19,7 @@
     {
       "binding": "DB",
       "database_name": "bumplog",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "69ea5a99-d103-4ce6-abc6-bfda6d0d9c99",
       "migrations_dir": "migrations"
     }
   ],
@@ -27,7 +27,7 @@
   "kv_namespaces": [
     {
       "binding": "CACHE",
-      "id": "0000000000000000000000000000000000"
+      "id": "be240ba7313249859cf45bd6ad514a3b"
     }
   ]
 }
