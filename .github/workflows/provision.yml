@@ -1,0 +1,49 @@
+name: Provision Cloudflare resources
+
+# Run once, by hand, before the first deploy. It creates the D1 database and
+# the KV namespace and prints their ids, which then have to be committed to
+# wrangler.jsonc — the deploy cannot look them up on its own.
+on:
+  workflow_dispatch:
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      # Creating a second database or namespace would be silently confusing,
+      # so refuse to run once real ids are in the config.
+      - name: Refuse to run twice
+        run: |
+          if ! grep -q '00000000-0000-0000-0000-000000000000' wrangler.jsonc; then
+            echo "wrangler.jsonc already holds real ids — resources exist. Nothing to do."
+            exit 1
+          fi
+
+      - name: Create resources
+        run: |
+          {
+            echo "## Add these to wrangler.jsonc"
+            echo
+            echo '### D1 (`d1_databases[0].database_id`)'
+            echo '```'
+            npx wrangler d1 create bumplog 2>&1
+            echo '```'
+            echo
+            echo '### KV (`kv_namespaces[0].id`)'
+            echo '```'
+            npx wrangler kv namespace create CACHE 2>&1
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Show the summary in the log too
+        run: cat "$GITHUB_STEP_SUMMARY"

@@ -58,7 +58,8 @@ the default run because GitHub allows only 60 unauthenticated API calls an hour.
 
 ## Deploying
 
-Requires a Cloudflare account. See [DEPLOY.md](DEPLOY.md).
+Pushing to `main` runs the tests and deploys via GitHub Actions. First-time
+setup — the API token, the D1 and KV resources — is in [DEPLOY.md](DEPLOY.md).
 
 ## Caching and cost
 

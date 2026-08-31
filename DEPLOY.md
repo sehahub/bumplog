@@ -1,25 +1,18 @@
 # Deploying Bumplog
 
-Everything below runs from this directory. Steps 1 and 2 need credentials that
-only the account owner can create.
+Deployment runs from GitHub Actions, so the Cloudflare token lives in GitHub
+Secrets and never has to exist on a developer machine.
 
-## 1. Cloudflare credentials
+| Workflow | Trigger | What it does |
+| --- | --- | --- |
+| `ci.yml` | pull requests, pushes off `main` | typecheck + tests |
+| `provision.yml` | manual, once | creates the D1 database and KV namespace |
+| `deploy.yml` | push to `main`, or manual | typecheck + tests, migrate, deploy |
 
-Either log in interactively once:
+## 1. Create the Cloudflare API token
 
-```sh
-npx wrangler login
-```
-
-or set an API token, which is what CI needs:
-
-```sh
-$env:CLOUDFLARE_API_TOKEN = "..."
-$env:CLOUDFLARE_ACCOUNT_ID = "..."
-```
-
-Create the token at **My Profile → API Tokens → Create Token → Custom token**
-with these account-level permissions:
+**My Profile → API Tokens → Create Token → Custom token**, with these
+account-level permissions:
 
 | Permission | Level |
 | --- | --- |
@@ -28,60 +21,79 @@ with these account-level permissions:
 | D1 | Edit |
 | Account Settings | Read |
 
-Static assets upload as part of the Worker script, so they need no permission of
-their own. A custom domain would additionally need zone-level `Workers Routes:
-Edit`.
+Static assets upload as part of the Worker script and need no permission of
+their own. A custom domain would additionally need zone-level
+`Workers Routes: Edit`.
 
-## 2. GitHub token (recommended)
+The account id is on the right-hand side of the Workers & Pages overview page,
+and in the dashboard URL.
 
-Without one, GitHub allows **60 API calls an hour for the entire site**, shared
+## 2. Add the repository secrets
+
+**Settings → Secrets and variables → Actions → New repository secret**:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+## 3. Provision the resources, once
+
+Run the **Provision Cloudflare resources** workflow from the Actions tab. It
+creates the D1 database `bumplog` and the KV namespace `CACHE`, and prints both
+ids in the run summary.
+
+Copy those two ids into `wrangler.jsonc`, replacing the placeholder zeros in
+`d1_databases[0].database_id` and `kv_namespaces[0].id`, and commit. The deploy
+cannot discover them on its own — Wrangler requires both to be in the config.
+
+The workflow refuses to run a second time once real ids are committed, so it
+cannot quietly create a duplicate database.
+
+## 4. Deploy
+
+Pushing to `main` now runs the tests, applies migrations and deploys. The Worker
+is live at `https://bumplog.<your-subdomain>.workers.dev`.
+
+## 5. GitHub token (recommended, after the first deploy)
+
+Without one, GitHub allows **60 API calls an hour for the whole site**, shared
 across every visitor. Most release notes come from `raw.githubusercontent.com`,
 which is not rate limited, but packages whose changelog has been rotated or
-never existed — `next`, `astro`, `@babel/core` — fall back to the API and will
-start coming up empty under any real traffic.
+never existed — `next`, `astro`, `@babel/core` — fall back to the API and go
+empty under any real traffic.
 
-A classic PAT with **no scopes at all** raises the limit to 5,000 an hour; it
-only ever reads public repositories.
+A classic PAT with **no scopes at all** raises this to 5,000 an hour; it only
+ever reads public repositories. It is a Worker secret rather than an Actions
+secret, so it is set with Wrangler:
 
 ```sh
 npx wrangler secret put GITHUB_TOKEN
 ```
 
-## 3. Create the resources
+That needs Cloudflare credentials locally. Alternatively set it in the
+dashboard: **Workers & Pages → bumplog → Settings → Variables and Secrets**.
 
-```sh
-npx wrangler d1 create bumplog
-npx wrangler kv namespace create CACHE
-```
+## 6. Custom domain (optional)
 
-Both commands print an id. Put them in `wrangler.jsonc` under
-`d1_databases[0].database_id` and `kv_namespaces[0].id`, replacing the
-placeholder zeros.
-
-## 4. Migrate and deploy
-
-```sh
-npx wrangler d1 migrations apply bumplog --remote
-npx wrangler deploy
-```
-
-The Worker is then live at `https://bumplog.<your-subdomain>.workers.dev`.
-
-## 5. Custom domain (optional)
-
-`workers.dev` works but Cloudflare recommends against it for production, and a
-real domain is worth much more for search. Register or add the domain in the
+`workers.dev` works, but Cloudflare recommends against it for production and a
+real domain is worth considerably more for search. Add the domain in the
 Cloudflare dashboard, then add a route to `wrangler.jsonc`:
 
 ```jsonc
 "routes": [{ "pattern": "bumplog.example.com", "custom_domain": true }]
 ```
 
+## Deploying from a machine instead
+
+```sh
+npx wrangler login
+npx wrangler d1 migrations apply bumplog --remote
+npx wrangler deploy
+```
+
 ## Verifying a deploy
 
 ```sh
 curl https://<host>/healthz            # {"ok":true}
-curl -s https://<host>/ | head -c 200  # the landing page
 ```
 
 Then paste a package.json at `/` and expand a row — that exercises the registry,
