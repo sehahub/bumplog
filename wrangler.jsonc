@@ -7,6 +7,12 @@
 
   "observability": { "enabled": true },
 
+  // The custom domain is the only host. Without workers_dev:false every deploy
+  // re-enables the workers.dev route, which would serve the same pages under a
+  // second hostname — each canonicalising to itself, splitting search signal.
+  "workers_dev": false,
+  "routes": [{ "pattern": "bumplog.sehahub.info", "custom_domain": true }],
+
   // Nightly: drop reports past their retention window.
   "triggers": { "crons": ["17 4 * * *"] },
 
