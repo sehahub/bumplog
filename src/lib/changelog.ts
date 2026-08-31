@@ -195,10 +195,10 @@ export function migrationGuides(body: string, limit = 3): Guide[] {
 
   const add = (label: string, url: string) => {
     const clean = url.replace(/[.,;:)\]]+$/, "");
-    if (seen.has(clean)) return;
+    if (seen.has(clean) || NOT_A_GUIDE.test(clean)) return;
     if (!GUIDE_HINT.test(label) && !GUIDE_HINT.test(clean)) return;
     seen.add(clean);
-    found.push({ label: label.trim() || clean, url: clean });
+    found.push({ label: cleanLabel(label) || clean, url: clean });
   };
 
   for (const match of body.matchAll(MARKDOWN_LINK)) add(match[1], match[2]);
@@ -213,10 +213,25 @@ export function migrationGuides(body: string, limit = 3): Guide[] {
   return found.slice(0, limit);
 }
 
+/**
+ * A guide is a document, never a pull request, issue, commit or diff — but
+ * changelogs are full of entries like "chore: Upgrade js-yaml (#13427)" whose
+ * titles trip the same keywords.
+ */
+const NOT_A_GUIDE = /\/(?:pull|issues|commit|commits|compare|releases)\//;
+
 /** The trailing words of a sentence, used as a link label. */
 function lastPhrase(text: string): string {
   const words = text.replace(/[:\s]+$/, "").split(/[.\n]/).pop()?.trim() ?? "";
   return words.split(/\s+/).slice(-6).join(" ");
+}
+
+/** Drop issue references and unbalanced brackets left by the surrounding markdown. */
+function cleanLabel(label: string): string {
+  return label
+    .replace(/\(?\[?#\d+\]?\)?/g, "")
+    .replace(/^[^\w`]+|[([\s]+$/g, "")
+    .trim();
 }
 
 /** `[text](url)` -> `text`, and drop trailing anchor cruft. */

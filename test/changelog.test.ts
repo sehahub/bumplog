@@ -293,3 +293,47 @@ describe("migrationGuides", () => {
     expect(migrationGuides("[migration](javascript:alert(1))")).toEqual([]);
   });
 });
+
+describe("migrationGuides noise filtering", () => {
+  it("rejects pull request links whose titles mention upgrading", () => {
+    // Real entries from turbo and jest release notes.
+    expect(
+      migrationGuides(
+        "* chore: Upgrade js-yaml by @anthonyshew in https://github.com/vercel/turborepo/pull/13427\n" +
+          "* `[docs]` Add upgrading guide ([#12633](https://github.com/facebook/jest/pull/12633))",
+      ),
+    ).toEqual([]);
+  });
+
+  it("rejects issue, commit, compare and release links", () => {
+    for (const url of [
+      "https://github.com/o/r/issues/12",
+      "https://github.com/o/r/commit/abc1234",
+      "https://github.com/o/r/compare/v1...v2",
+      "https://github.com/o/r/releases/tag/v2.0.0",
+    ]) {
+      expect(migrationGuides(`See the [migration](${url})`)).toEqual([]);
+    }
+  });
+
+  it("still accepts a guide hosted on github", () => {
+    expect(
+      migrationGuides("[Migration Guide](https://github.com/o/r/blob/main/MIGRATION.md)"),
+    ).toEqual([
+      { label: "Migration Guide", url: "https://github.com/o/r/blob/main/MIGRATION.md" },
+    ]);
+  });
+
+  it("shows the url when the link label is only an issue reference", () => {
+    expect(
+      migrationGuides("- see ([#19846](https://tailwindcss.com/docs/upgrade-guide))")[0].label,
+    ).toBe("https://tailwindcss.com/docs/upgrade-guide");
+  });
+
+  it("trims bracket noise off a real label", () => {
+    expect(
+      migrationGuides("- [the upgrade guide #123](https://tailwindcss.com/docs/upgrade-guide)")[0]
+        .label,
+    ).toBe("the upgrade guide");
+  });
+});
