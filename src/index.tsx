@@ -203,6 +203,16 @@ ${urls.map((url) => `  <url><loc>${url}</loc></url>`).join("\n")}
   return c.body(body, 200, { "content-type": "application/xml; charset=utf-8" });
 });
 
+// Served by the Worker rather than as a static file: a Sitemap directive has
+// to be an absolute url, and the host is only known per request.
+app.get("/robots.txt", (c) =>
+  c.text(
+    ["User-agent: *", "Allow: /", "Disallow: /r/", `Sitemap: ${origin(c.req.url)}/sitemap.xml`].join(
+      "\n",
+    ),
+  ),
+);
+
 app.get("/healthz", (c) => c.json({ ok: true }));
 
 app.notFound((c) =>

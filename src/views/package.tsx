@@ -65,16 +65,13 @@ export function PackageView(props: { facts: PackageFacts; latest: string }) {
 
       <h2 class="section-title">Recent releases</h2>
       <ul class="muted-list">
-        {facts.stable
-          .slice(-RECENT_SHOWN)
-          .reverse()
-          .map((version) => (
-            <li>
-              <span class="mono">{version}</span>
-              {facts.time[version] ? ` — ${formatDate(facts.time[version])}` : null}
-              {facts.deprecations[version] ? <span class="tag deprecated">deprecated</span> : null}
-            </li>
-          ))}
+        {mostRecent(facts).map((version) => (
+          <li>
+            <span class="mono">{version}</span>
+            {facts.time[version] ? ` — ${formatDate(facts.time[version])}` : null}
+            {facts.deprecations[version] ? <span class="tag deprecated">deprecated</span> : null}
+          </li>
+        ))}
       </ul>
 
       <p class="hint" style="margin-top:28px">
@@ -111,6 +108,17 @@ export function PopularView(props: { packages: { name: string; hits: number }[] 
       )}
     </>
   );
+}
+
+/**
+ * Newest by publish date, not by version — a maintenance backport to an older
+ * line is genuinely recent, and listing it in semver order looks like an error
+ * next to its date.
+ */
+function mostRecent(facts: PackageFacts): string[] {
+  return [...facts.stable]
+    .sort((a, b) => Date.parse(facts.time[b] ?? "") - Date.parse(facts.time[a] ?? ""))
+    .slice(0, RECENT_SHOWN);
 }
 
 /** The first release of each major line, newest first. */
