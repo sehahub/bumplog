@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022"],
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "types": ["@cloudflare/workers-types", "vitest/globals"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src/**/*", "test/**/*"]
+}

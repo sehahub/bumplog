@@ -1,0 +1,27 @@
+{
+  "name": "bumplog",
+  "version": "0.1.0",
+  "description": "See what actually changed before you bump a dependency.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "migrate:local": "wrangler d1 migrations apply bumplog --local",
+    "migrate:remote": "wrangler d1 migrations apply bumplog --remote"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260830.1",
+    "@types/semver": "^7.8.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.127.1"
+  },
+  "dependencies": {
+    "hono": "^4.13.5",
+    "semver": "^7.8.5"
+  }
+}

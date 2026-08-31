@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bumplog",
+  "main": "src/index.tsx",
+  "compatibility_date": "2026-08-28",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "observability": { "enabled": true },
+
+  // Nightly: drop reports past their retention window.
+  "triggers": { "crons": ["17 4 * * *"] },
+
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "none"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "bumplog",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "0000000000000000000000000000000000"
+    }
+  ]
+}
