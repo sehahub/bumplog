@@ -10,8 +10,11 @@
   // The custom domain is the only host. Without workers_dev:false every deploy
   // re-enables the workers.dev route, which would serve the same pages under a
   // second hostname — each canonicalising to itself, splitting search signal.
+  //
+  // bumplog.sehahub.info is attached in the dashboard rather than declared
+  // here: a `custom_domain` route makes Wrangler manage the zone's DNS, which
+  // needs a zone-scoped token. Not worth widening the token for.
   "workers_dev": false,
-  "routes": [{ "pattern": "bumplog.sehahub.info", "custom_domain": true }],
 
   // Nightly: drop reports past their retention window.
   "triggers": { "crons": ["17 4 * * *"] },
