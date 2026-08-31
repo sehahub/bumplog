@@ -3,19 +3,23 @@ import type { Cache } from "../src/lib/cache";
 import { fetchNotes } from "../src/lib/notes";
 import type { Repo } from "../src/lib/repo";
 
-function memoryCache(): Cache & { size: () => number } {
+function memoryCache(): Cache & { ttlOf: (key: string) => number | undefined } {
   const store = new Map<string, string>();
+  const ttls = new Map<string, number>();
   return {
     async get<T>(key: string) {
       const raw = store.get(key);
       return raw === undefined ? null : (JSON.parse(raw) as T);
     },
-    async put(key, value) {
+    async put(key, value, ttl) {
       store.set(key, JSON.stringify(value));
+      ttls.set(key, ttl);
     },
-    size: () => store.size,
+    ttlOf: (key) => ttls.get(key),
   };
 }
+
+const DAY = 24 * 60 * 60;
 
 /** Serves only the URLs it is given; everything else 404s. */
 function stubFetch(routes: Record<string, string>) {
@@ -182,6 +186,32 @@ describe("fetchNotes", () => {
     expect(calls.filter((c) => c.includes("/releases/tags/"))).toEqual([
       "https://api.github.com/repos/acme/widget/releases/tags/widget%405.0.0",
     ]);
+  });
+
+  it("caches a real find for far longer than a real miss", async () => {
+    const { fetcher } = stubFetch({
+      "https://raw.githubusercontent.com/acme/widget/HEAD/CHANGELOG.md": CHANGELOG,
+    });
+
+    await fetchNotes("widget", repo, ["2.0.0", "9.9.9"], { cache, fetcher });
+
+    expect(cache.ttlOf("note:v1:widget:2.0.0")).toBe(30 * DAY);
+    expect(cache.ttlOf("note:v1:widget:9.9.9")).toBe(7 * DAY);
+  });
+
+  it("does not cache a rate-limited miss for a month", async () => {
+    const fetcher = (async (input: RequestInfo | URL) => {
+      if (String(input).includes("api.github.com")) {
+        return new Response("limited", { status: 403 });
+      }
+      return new Response("Not Found", { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const result = await fetchNotes("widget", repo, ["2.0.0"], { cache, fetcher });
+
+    expect(result.missing).toEqual(["2.0.0"]);
+    // Short enough that the answer is re-fetched once the limit clears.
+    expect(cache.ttlOf("note:v1:widget:2.0.0")).toBeLessThanOrEqual(15 * 60);
   });
 
   it("stops calling the api once github reports a rate limit", async () => {

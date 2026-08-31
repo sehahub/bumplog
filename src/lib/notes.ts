@@ -30,6 +30,8 @@ const RAW = "https://raw.githubusercontent.com";
 const API = "https://api.github.com";
 
 const NOTE_TTL = 30 * 24 * 60 * 60;
+/** A version that genuinely has no notes rarely gains them, but it can. */
+const MISS_TTL = 7 * 24 * 60 * 60;
 const SOURCE_TTL = 7 * 24 * 60 * 60;
 const DOC_TTL = 12 * 60 * 60;
 const MAX_DOC_BYTES = 3_000_000;
@@ -64,10 +66,17 @@ export async function fetchNotes(
   if (wanted.length > 0) {
     const found = await loadFromSource(pkg, repo, wanted, deps);
     for (const version of wanted) known.set(version, found.get(version) ?? null);
+
+    // A release's notes never change, so a hit is cached for a long time. A
+    // miss might only mean GitHub was rate limiting us just now, and caching
+    // that for a month would turn a bad minute into a bad month.
+    const degraded = await rateLimited(deps);
     await Promise.all(
-      wanted.map((version) =>
-        deps.cache.put(noteKey(pkg, version), { note: known.get(version) ?? null }, NOTE_TTL),
-      ),
+      wanted.map((version) => {
+        const note = known.get(version) ?? null;
+        const ttl = note ? NOTE_TTL : degraded ? LIMIT_TTL : MISS_TTL;
+        return deps.cache.put(noteKey(pkg, version), { note }, ttl);
+      }),
     );
   }
 
