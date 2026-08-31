@@ -88,6 +88,27 @@ describe("fetchNotes", () => {
     expect(calls[0]).toContain("packages/widget/CHANGELOG.md");
   });
 
+  it("prefers the package's own changelog when the root has one too", async () => {
+    // Candidates are probed concurrently, so priority has to be decided by
+    // position rather than by which response arrives first.
+    const { fetcher } = stubFetch({
+      "https://raw.githubusercontent.com/acme/widget/HEAD/packages/widget/CHANGELOG.md":
+        CHANGELOG,
+      "https://raw.githubusercontent.com/acme/widget/HEAD/CHANGELOG.md":
+        "## 2.0.0\n\n- the wrong one\n",
+    });
+
+    const result = await fetchNotes(
+      "widget",
+      { ...repo, directory: "packages/widget" },
+      ["2.0.0"],
+      { cache, fetcher },
+    );
+
+    expect(result.notes[0].breaking).toEqual(["dropped the legacy adapter"]);
+    expect(result.notes[0].sourceUrl).toContain("packages/widget/CHANGELOG.md");
+  });
+
   it("falls back to github releases when there is no changelog file", async () => {
     const releases = JSON.stringify([
       { tag_name: "v2.0.0", body: "BREAKING CHANGE: gone\r\n", html_url: "https://x/2" },

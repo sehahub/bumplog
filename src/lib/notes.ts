@@ -37,6 +37,8 @@ const DOC_TTL = 12 * 60 * 60;
 const MAX_DOC_BYTES = 3_000_000;
 
 const CHANGELOG_FILES = ["CHANGELOG.md", "CHANGES.md", "HISTORY.md", "changelog.md"];
+/** Workers allow six connections waiting on response headers at a time. */
+const PROBE_CONCURRENCY = 4;
 
 export type Deps = {
   cache: Cache;
@@ -167,43 +169,92 @@ type ChangelogDoc = { text: string; url: string };
 
 /** Find and read the repo's changelog file, remembering which path worked. */
 async function loadChangelogDoc(repo: Repo, deps: Deps): Promise<ChangelogDoc | null> {
-  const fetcher = deps.fetcher ?? fetch;
   const sourceKey = `clsrc:v1:${repo.owner}/${repo.name}:${repo.directory ?? ""}`;
-
   const known = await deps.cache.get<string | null>(sourceKey);
-  const candidates = known === null ? candidatePaths(repo) : known ? [known] : [];
 
-  for (const path of candidates) {
-    const url = `${RAW}/${repo.owner}/${repo.name}/HEAD/${path}`;
-    const docKey = `cldoc:v1:${repo.owner}/${repo.name}:${path}`;
+  // "" means we have looked and this repo has no changelog file.
+  if (known === "") return null;
 
-    const cachedText = await deps.cache.get<string>(docKey);
-    if (cachedText !== null) {
-      await deps.cache.put(sourceKey, path, SOURCE_TTL);
-      return { text: cachedText, url: viewUrl(repo, path) };
-    }
-
-    let response: Response;
-    try {
-      response = await fetcher(url, { headers: { "user-agent": USER_AGENT } });
-    } catch {
-      continue;
-    }
-    if (!response.ok) continue;
-
-    const length = Number(response.headers.get("content-length") ?? "0");
-    if (length > MAX_DOC_BYTES) continue;
-
-    const text = await response.text();
-    if (text.length > MAX_DOC_BYTES) continue;
-
-    await deps.cache.put(docKey, text, DOC_TTL);
-    await deps.cache.put(sourceKey, path, SOURCE_TTL);
-    return { text, url: viewUrl(repo, path) };
+  if (known) {
+    const cachedText = await deps.cache.get<string>(docKey(repo, known));
+    if (cachedText !== null) return { text: cachedText, url: viewUrl(repo, known) };
+    const doc = await readChangelog(repo, known, deps);
+    if (doc) return doc;
+    // The file moved or went away; fall through and look again.
   }
 
-  if (known === null) await deps.cache.put(sourceKey, "", SOURCE_TTL);
-  return null;
+  // Nothing known yet. Most repos answer 404 for most candidates, and doing
+  // that one at a time cost over a second for a repo with no changelog, so
+  // every candidate is tried at once and the best one wins.
+  const candidates = candidatePaths(repo);
+  const responses = await pooled(candidates, PROBE_CONCURRENCY, async (path) => {
+    try {
+      const response = await (deps.fetcher ?? fetch)(rawUrl(repo, path), {
+        headers: { "user-agent": USER_AGENT },
+      });
+      return { path, response };
+    } catch {
+      return { path, response: null };
+    }
+  });
+
+  let winner: { path: string; response: Response } | null = null;
+  for (const item of responses) {
+    const usable =
+      item.response?.ok &&
+      Number(item.response.headers.get("content-length") ?? "0") <= MAX_DOC_BYTES;
+    if (usable && !winner) winner = { path: item.path, response: item.response as Response };
+    // Nothing reads the losing bodies, so let them go rather than leaving
+    // half-read responses open.
+    else item.response?.body?.cancel().catch(() => {});
+  }
+
+  if (!winner) {
+    await deps.cache.put(sourceKey, "", SOURCE_TTL);
+    return null;
+  }
+
+  const text = await winner.response.text();
+  if (text.length > MAX_DOC_BYTES) {
+    await deps.cache.put(sourceKey, "", SOURCE_TTL);
+    return null;
+  }
+
+  await deps.cache.put(docKey(repo, winner.path), text, DOC_TTL);
+  await deps.cache.put(sourceKey, winner.path, SOURCE_TTL);
+  return { text, url: viewUrl(repo, winner.path) };
+}
+
+/** Read one known changelog path, or null if it is no longer there. */
+async function readChangelog(
+  repo: Repo,
+  path: string,
+  deps: Deps,
+): Promise<ChangelogDoc | null> {
+  let response: Response;
+  try {
+    response = await (deps.fetcher ?? fetch)(rawUrl(repo, path), {
+      headers: { "user-agent": USER_AGENT },
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+  if (Number(response.headers.get("content-length") ?? "0") > MAX_DOC_BYTES) return null;
+
+  const text = await response.text();
+  if (text.length > MAX_DOC_BYTES) return null;
+
+  await deps.cache.put(docKey(repo, path), text, DOC_TTL);
+  return { text, url: viewUrl(repo, path) };
+}
+
+function rawUrl(repo: Repo, path: string): string {
+  return `${RAW}/${repo.owner}/${repo.name}/HEAD/${path}`;
+}
+
+function docKey(repo: Repo, path: string): string {
+  return `cldoc:v1:${repo.owner}/${repo.name}:${path}`;
 }
 
 function candidatePaths(repo: Repo): string[] {

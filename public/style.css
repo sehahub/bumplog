@@ -283,6 +283,25 @@ button.primary:hover { filter: brightness(1.08); }
 }
 .notes .breaking ul { margin: 6px 0 0; padding-left: 20px; }
 .notes .breaking li { margin: 3px 0; }
+/* Many projects ship no breaking-change list at all and just point at a
+   migration guide, which then becomes the most useful thing in the row. */
+.notes .guide {
+  margin: 8px 0;
+  padding: 8px 14px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  background: var(--accent-soft);
+  font-size: 13px;
+}
+.notes .guide-label {
+  font-size: 11px;
+  font-weight: 640;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-right: 4px;
+}
+
 .notes .body { color: var(--muted); }
 .notes .body ul { padding-left: 20px; margin: 6px 0; }
 .notes .body p { margin: 6px 0; }

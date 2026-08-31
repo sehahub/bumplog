@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { breakingChanges, sectionFor, splitChangelog } from "../src/lib/changelog";
+import {
+  breakingChanges,
+  migrationGuides,
+  sectionFor,
+  splitChangelog,
+} from "../src/lib/changelog";
 
 describe("splitChangelog", () => {
   it("parses keep-a-changelog headings", () => {
@@ -223,5 +228,68 @@ describe("breakingChanges", () => {
     expect(breakingChanges("### Bug Fixes\n\n* fix a typo\n")).toEqual([]);
     expect(breakingChanges("### Minor Changes\n\n- a new option\n")).toEqual([]);
     expect(breakingChanges("### Patch Changes\n\n- a fix\n")).toEqual([]);
+  });
+});
+
+describe("migrationGuides", () => {
+  it("finds a bare upgrade-guide url, as turbo publishes it", () => {
+    expect(
+      migrationGuides(
+        "What's Changed\n\nUpgrade guide: https://turbo.build/repo/docs/crafting-your-repository/upgrading\n\n* feat: a thing by @someone",
+      ),
+    ).toEqual([
+      {
+        label: "Upgrade guide",
+        url: "https://turbo.build/repo/docs/crafting-your-repository/upgrading",
+      },
+    ]);
+  });
+
+  it("finds a markdown migration link, as TanStack Query publishes it", () => {
+    expect(
+      migrationGuides(
+        "Read the [migration guide](https://tanstack.com/query/v5/docs/react/guides/migrating-to-v5) here.",
+      ),
+    ).toEqual([
+      {
+        label: "migration guide",
+        url: "https://tanstack.com/query/v5/docs/react/guides/migrating-to-v5",
+      },
+    ]);
+  });
+
+  it("matches on the label when the url says nothing", () => {
+    expect(
+      migrationGuides("Please checkout our [Migration Guide](https://storybook.js.org/docs/8)."),
+    ).toEqual([{ label: "Migration Guide", url: "https://storybook.js.org/docs/8" }]);
+  });
+
+  it("ignores ordinary links", () => {
+    expect(
+      migrationGuides(
+        "* fix: a thing by @a in https://github.com/o/r/pull/1\n* See [the docs](https://example.com/docs)",
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not repeat a url that appears twice", () => {
+    const body =
+      "Migration guide: https://x.com/migrating\n\nAgain: [migration](https://x.com/migrating)";
+    expect(migrationGuides(body)).toHaveLength(1);
+  });
+
+  it("strips punctuation that trails a bare url", () => {
+    expect(migrationGuides("See the upgrade guide at https://x.com/upgrading.")[0].url).toBe(
+      "https://x.com/upgrading",
+    );
+  });
+
+  it("caps how many it returns", () => {
+    const body = Array.from({ length: 6 }, (_, i) => `[migration](https://x.com/${i})`).join(" ");
+    expect(migrationGuides(body)).toHaveLength(3);
+  });
+
+  it("only accepts http urls", () => {
+    expect(migrationGuides("[migration](javascript:alert(1))")).toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
 import { raw } from "hono/html";
+import { migrationGuides } from "../lib/changelog";
 import { renderMarkdown } from "../lib/md";
 import type { NotesLookup } from "../lib/notes";
 
@@ -22,12 +23,27 @@ export function NotesView(props: { lookup: NotesLookup; repoUrl?: string }) {
       {lookup.notes.map((note) => {
         const shown = note.breaking.slice(0, BREAKING_SHOWN);
         const hidden = note.breaking.length - shown.length;
+        const guides = migrationGuides(note.body);
 
         return (
           <section>
             <h4>
               {note.sourceUrl ? <a href={note.sourceUrl}>{note.version}</a> : note.version}
             </h4>
+
+            {guides.length > 0 ? (
+              <div class="guide">
+                <span class="guide-label">Migration guide</span>{" "}
+                {guides.map((guide, index) => (
+                  <>
+                    {index > 0 ? " · " : ""}
+                    <a href={guide.url} rel="nofollow noopener">
+                      {guide.label}
+                    </a>
+                  </>
+                ))}
+              </div>
+            ) : null}
 
             {shown.length > 0 ? (
               <div class="breaking">

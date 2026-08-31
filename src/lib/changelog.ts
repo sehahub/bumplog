@@ -176,6 +176,49 @@ export function hasBreakingChanges(body: string): boolean {
   return breakingChanges(body).length > 0;
 }
 
+export type Guide = { label: string; url: string };
+
+/** Words that mark a link as the thing you read before upgrading. */
+const GUIDE_HINT = /migrat|upgrad|breaking[\s-]?change/i;
+const MARKDOWN_LINK = /\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g;
+const BARE_URL = /(?:^|[\s(])(https?:\/\/[^\s<)"']+)/g;
+
+/**
+ * Plenty of projects put no breaking changes in their release notes at all —
+ * turbo lists PR titles, TanStack Query and Storybook just say "read the
+ * migration guide". The link they point at is then the most useful thing on
+ * the page, so it is worth pulling out.
+ */
+export function migrationGuides(body: string, limit = 3): Guide[] {
+  const found: Guide[] = [];
+  const seen = new Set<string>();
+
+  const add = (label: string, url: string) => {
+    const clean = url.replace(/[.,;:)\]]+$/, "");
+    if (seen.has(clean)) return;
+    if (!GUIDE_HINT.test(label) && !GUIDE_HINT.test(clean)) return;
+    seen.add(clean);
+    found.push({ label: label.trim() || clean, url: clean });
+  };
+
+  for (const match of body.matchAll(MARKDOWN_LINK)) add(match[1], match[2]);
+
+  // A bare url is often introduced by the sentence above it, so the preceding
+  // words stand in for a label.
+  for (const match of body.matchAll(BARE_URL)) {
+    const before = body.slice(Math.max(0, match.index - 60), match.index);
+    add(GUIDE_HINT.test(before) ? lastPhrase(before) : "", match[1]);
+  }
+
+  return found.slice(0, limit);
+}
+
+/** The trailing words of a sentence, used as a link label. */
+function lastPhrase(text: string): string {
+  const words = text.replace(/[:\s]+$/, "").split(/[.\n]/).pop()?.trim() ?? "";
+  return words.split(/\s+/).slice(-6).join(" ");
+}
+
 /** `[text](url)` -> `text`, and drop trailing anchor cruft. */
 function cleanHeading(raw: string): string {
   return raw
